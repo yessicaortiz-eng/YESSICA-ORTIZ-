@@ -13,9 +13,10 @@ import { ChatContainer } from "./components/ChatContainer";
 import { PomodoroTimer } from "./components/PomodoroTimer";
 import { SessionHistory } from "./components/SessionHistory";
 import { LoginModal } from "./components/LoginModal";
-import { Bot, Sparkles, RefreshCw, AlertCircle, HelpCircle, ShieldAlert, BookOpen, LogIn, LogOut, User, Check, X as CloseIcon, Sun, Moon } from "lucide-react";
+import { Bot, Sparkles, RefreshCw, AlertCircle, HelpCircle, ShieldAlert, BookOpen, LogIn, LogOut, User, Check, X as CloseIcon, Sun, Moon, Download } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
+import { exportSessionToPdf } from "./utils/pdfExport";
 
 export default function App() {
   // Chat state parameters
@@ -449,6 +450,23 @@ export default function App() {
               ) : (
                 <Sun className="w-4 h-4 text-[#5A5A40]" />
               )}
+            </button>
+
+            <button
+              onClick={() => exportSessionToPdf({
+                user,
+                messages,
+                unlockedConcepts,
+                evaluation,
+                currentPhase,
+                xp
+              })}
+              className="inline-flex items-center gap-2 bg-[#5A5A40] hover:bg-[#4A4A33] border border-[#5A5A40] text-white font-semibold text-xs px-4 py-2 rounded-full transition-colors duration-200 cursor-pointer shadow-xs"
+              id="save-session-header-btn"
+              title="Guardar sesión y exportar PDF completo"
+            >
+              <Download className="w-3.5 h-3.5 text-white" />
+              Guardar Sesión
             </button>
 
             <button
