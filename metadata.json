@@ -1,0 +1,6 @@
+{
+  "name": "Tutor de Inteligencia Artificial Responsable",
+  "description": "Un tutor conversacional adaptativo diseñado para estudiantes de Bachillerato sobre el uso ético y responsable de la Inteligencia Artificial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
