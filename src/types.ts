@@ -22,6 +22,20 @@ export interface Evaluation {
   recursosRecomendados: string[];
 }
 
+export interface SavedSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+  currentPhase: number;
+  progressPercentage: number;
+  attempts: number;
+  unlockedConcepts: string[];
+  isActivityFinished: boolean;
+  evaluation: Evaluation | null;
+}
+
 export interface TutorState {
   tutorResponse: string;
   currentPhase: number; // 1: ¿Qué es la IA?, 2: IA Tradicional vs Generativa, 3: Ventajas y Riesgos, 4: Aspectos Éticos, 5: Aplicación Real, 6: Evaluación Final
@@ -49,3 +63,28 @@ export const PHASES = [
   { id: 5, name: 'Aplicación Práctica', desc: 'Situaciones de la vida real' },
   { id: 6, name: 'Evaluación y Reporte', desc: 'Resultados finales' }
 ];
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  grade: string;
+  institution: string;
+  avatarColor: string;
+}
+
+export interface TextAnalysisCriterion {
+  name: string;
+  status: 'Cumple' | 'Advertencia' | 'No cumple' | string;
+  feedback: string;
+}
+
+export interface TextAnalysisResult {
+  isCompliant: boolean;
+  analysisText: string;
+  citationsDetected: boolean;
+  integrityScore: number;
+  criteriaEvaluated: TextAnalysisCriterion[];
+  suggestions: string[];
+}
+
+

@@ -4,13 +4,17 @@
  */
 
 import React, { useState, useEffect } from "react";
-import { ChatMessage, Evaluation, PHASES } from "./types";
+import { ChatMessage, Evaluation, PHASES, SavedSession, UserProfile } from "./types";
 import { ProgressTimeline } from "./components/ProgressTimeline";
 import { ConceptBadges } from "./components/ConceptBadges";
 import { EvaluationCard } from "./components/EvaluationCard";
 import { ChatContainer } from "./components/ChatContainer";
-import { Bot, Sparkles, RefreshCw, AlertCircle, HelpCircle, ShieldAlert, BookOpen } from "lucide-react";
+import { PomodoroTimer } from "./components/PomodoroTimer";
+import { SessionHistory } from "./components/SessionHistory";
+import { LoginModal } from "./components/LoginModal";
+import { Bot, Sparkles, RefreshCw, AlertCircle, HelpCircle, ShieldAlert, BookOpen, LogIn, LogOut, User, Check, X as CloseIcon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import confetti from "canvas-confetti";
 
 export default function App() {
   // Chat state parameters
@@ -22,18 +26,114 @@ export default function App() {
   const [isActivityFinished, setIsActivityFinished] = useState<boolean>(false);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
 
+  // User Profile and Authentication State
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+
+  // Session History State parameters
+  const [sessions, setSessions] = useState<SavedSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
   // Network and status state
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // Fetch the initial tutor greeting on mount
+  // Helper to load a selected session
+  const loadSession = (session: SavedSession) => {
+    setCurrentSessionId(session.id);
+    setMessages(session.messages);
+    setCurrentPhase(session.currentPhase);
+    setProgressPercentage(session.progressPercentage);
+    setAttempts(session.attempts);
+    setUnlockedConcepts(session.unlockedConcepts);
+    setIsActivityFinished(session.isActivityFinished);
+    setEvaluation(session.evaluation);
+  };
+
+  // Helper to delete a session from storage
+  const deleteSession = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = sessions.filter(s => s.id !== id);
+    setSessions(updated);
+    localStorage.setItem("eduia_tutor_sessions", JSON.stringify(updated));
+    if (currentSessionId === id) {
+      if (updated.length > 0) {
+        loadSession(updated[0]);
+      } else {
+        startActivity();
+      }
+    }
+  };
+
+  const handleUserLogin = (profile: UserProfile) => {
+    setUser(profile);
+    localStorage.setItem("eduia_tutor_user", JSON.stringify(profile));
+  };
+
+  const handleUserLogout = () => {
+    setUser(null);
+    localStorage.removeItem("eduia_tutor_user");
+  };
+
+  // Fetch the initial tutor greeting on mount, or load existing history
   useEffect(() => {
+    // Load saved student/user profile if exists
+    const savedUser = localStorage.getItem("eduia_tutor_user");
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (err) {
+        console.error("No se pudo cargar el perfil del estudiante:", err);
+      }
+    }
+
+    const saved = localStorage.getItem("eduia_tutor_sessions");
+    if (saved) {
+      try {
+        const parsed: SavedSession[] = JSON.parse(saved);
+        setSessions(parsed);
+        if (parsed.length > 0) {
+          // Find the most recently updated session
+          const mostRecent = parsed.reduce((latest, curr) => {
+            return new Date(curr.updatedAt) > new Date(latest.updatedAt) ? curr : latest;
+          }, parsed[0]);
+          loadSession(mostRecent);
+          return;
+        }
+      } catch (err) {
+        console.error("No se pudo parsear el historial de sesiones:", err);
+      }
+    }
+    // No saved session found: start a fresh one
     startActivity();
   }, []);
 
-  const startActivity = async () => {
+  // Global keyboard shortcuts: Ctrl+N (New Session), Ctrl+T (Toggle Pomodoro)
+  useEffect(() => {
+    const handleGlobalShortcuts = (e: KeyboardEvent) => {
+      // Ctrl+N: Nueva Sesión
+      if (e.ctrlKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        startActivity(true);
+      }
+      // Ctrl+T: Toggle Pomodoro Timer
+      if (e.ctrlKey && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("toggle-pomodoro"));
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalShortcuts);
+    return () => window.removeEventListener("keydown", handleGlobalShortcuts);
+  }, [sessions, currentSessionId]);
+
+  const startActivity = async (forceNewId?: string | boolean) => {
     setIsLoading(true);
     setApiError(null);
+
+    const sessionId = typeof forceNewId === "string" ? forceNewId : `session-${Date.now()}`;
+    setCurrentSessionId(sessionId);
+
     setMessages([]);
     setCurrentPhase(1);
     setProgressPercentage(10);
@@ -55,23 +155,45 @@ export default function App() {
 
       const data = await response.json();
       
-      // Load response from server
-      setMessages([
-        {
-          id: `msg-${Date.now()}`,
-          role: "model",
-          text: data.tutorResponse,
-          timestamp: new Date().toISOString(),
-          phase: data.currentPhase,
-          unlockedConcepts: data.conceptosClaveDesbloqueados
-        }
-      ]);
+      const initialMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: "model",
+        text: data.tutorResponse,
+        timestamp: new Date().toISOString(),
+        phase: data.currentPhase || 1,
+        unlockedConcepts: data.conceptosClaveDesbloqueados || []
+      };
+
+      const initialMsgs = [initialMsg];
+      setMessages(initialMsgs);
       setCurrentPhase(data.currentPhase || 1);
       setProgressPercentage(data.phaseProgressPercentage || 10);
       setAttempts(data.attemptsForCurrentQuestion || 0);
-      if (data.conceptosClaveDesbloqueados) {
-        setUnlockedConcepts(data.conceptosClaveDesbloqueados);
-      }
+      const initialUnlocked = data.conceptosClaveDesbloqueados || [];
+      setUnlockedConcepts(initialUnlocked);
+
+      // Create new session or update existing
+      const newSession: SavedSession = {
+        id: sessionId,
+        title: `Sesión: ${new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" })} - ${PHASES[(data.currentPhase || 1) - 1]?.name || 'Inicio'}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: initialMsgs,
+        currentPhase: data.currentPhase || 1,
+        progressPercentage: data.phaseProgressPercentage || 10,
+        attempts: data.attemptsForCurrentQuestion || 0,
+        unlockedConcepts: initialUnlocked,
+        isActivityFinished: false,
+        evaluation: null
+      };
+
+      setSessions(prev => {
+        const filtered = prev.filter(s => s.id !== sessionId);
+        const updated = [newSession, ...filtered];
+        localStorage.setItem("eduia_tutor_sessions", JSON.stringify(updated));
+        return updated;
+      });
+
     } catch (err: any) {
       console.error("No se pudo iniciar la tutoría:", err);
       setApiError(
@@ -117,6 +239,8 @@ export default function App() {
       }
 
       const data = await response.json();
+      const newPhase = data.currentPhase || currentPhase;
+      const finished = !!data.isActivityFinished;
 
       // Update state with tutor's feedback
       const modelMessage: ChatMessage = {
@@ -124,24 +248,96 @@ export default function App() {
         role: "model",
         text: data.tutorResponse,
         timestamp: new Date().toISOString(),
-        phase: data.currentPhase,
+        phase: newPhase,
         unlockedConcepts: data.conceptosClaveDesbloqueados
       };
 
       setMessages(prev => [...prev, modelMessage]);
-      setCurrentPhase(data.currentPhase || currentPhase);
+
+      // Celebration Trigger: student advanced to the next phase or fully completed the session
+      if ((newPhase > currentPhase) || finished) {
+        if (finished) {
+          // Gorgeous full-scale celebratory fireworks confetti for session completion!
+          const duration = 3.5 * 1000;
+          const end = Date.now() + duration;
+
+          const frame = () => {
+            confetti({
+              particleCount: 6,
+              angle: 60,
+              spread: 60,
+              origin: { x: 0, y: 0.75 }
+            });
+            confetti({
+              particleCount: 6,
+              angle: 120,
+              spread: 60,
+              origin: { x: 1, y: 0.75 }
+            });
+
+            if (Date.now() < end) {
+              requestAnimationFrame(frame);
+            }
+          };
+          frame();
+        } else {
+          // Standard joyful celebratory confetti burst for advancing in a phase
+          confetti({
+            particleCount: 80,
+            spread: 65,
+            origin: { y: 0.7 }
+          });
+        }
+      }
+
+      setCurrentPhase(newPhase);
       setProgressPercentage(data.phaseProgressPercentage || progressPercentage);
       setAttempts(data.attemptsForCurrentQuestion || 0);
       
+      let finalConcepts = unlockedConcepts;
       if (data.conceptosClaveDesbloqueados) {
         setUnlockedConcepts(data.conceptosClaveDesbloqueados);
+        finalConcepts = data.conceptosClaveDesbloqueados;
       }
 
-      if (data.isActivityFinished) {
+      let finalEvaluation = evaluation;
+      if (finished) {
         setIsActivityFinished(true);
         if (data.evaluation) {
           setEvaluation(data.evaluation);
+          finalEvaluation = data.evaluation;
         }
+      }
+
+      // Save/update session in state & localStorage
+      if (currentSessionId) {
+        setSessions(prev => {
+          const updated = prev.map(s => {
+            if (s.id === currentSessionId) {
+              const firstUserMsg = updatedMessages.find(m => m.role === 'user');
+              const phaseName = PHASES[newPhase - 1]?.name || 'Evaluación';
+              const title = firstUserMsg 
+                ? `Sesión: ${firstUserMsg.text.slice(0, 25)}${firstUserMsg.text.length > 25 ? "..." : ""} (${phaseName})`
+                : s.title;
+
+              return {
+                ...s,
+                title,
+                updatedAt: new Date().toISOString(),
+                messages: [...updatedMessages, modelMessage],
+                currentPhase: newPhase,
+                progressPercentage: data.phaseProgressPercentage || progressPercentage,
+                attempts: data.attemptsForCurrentQuestion || 0,
+                unlockedConcepts: finalConcepts,
+                isActivityFinished: finished,
+                evaluation: finished ? finalEvaluation : s.evaluation
+              };
+            }
+            return s;
+          });
+          localStorage.setItem("eduia_tutor_sessions", JSON.stringify(updated));
+          return updated;
+        });
       }
     } catch (err: any) {
       console.error("Error al procesar el chat:", err);
@@ -179,13 +375,52 @@ export default function App() {
 
           <div className="flex items-center gap-3" id="header-actions">
             <button
-              onClick={startActivity}
+              onClick={() => startActivity(true)}
               className="inline-flex items-center gap-2 bg-[#E8E8E1] hover:bg-[#DCDCD2] border border-[#DCDCD2] text-[#2D2D2A] font-semibold text-xs px-4 py-2 rounded-full transition-colors duration-200 cursor-pointer shadow-3xs"
               id="restart-header-btn"
             >
               <RefreshCw className="w-3.5 h-3.5 text-[#5A5A40]" />
-              Reiniciar Sesión
+              Nueva Sesión
             </button>
+
+            {user ? (
+              <div className="flex items-center gap-2.5 bg-[#F5F5F0] border border-[#DCDCD2] pl-2.5 pr-3 py-1.5 rounded-full shadow-3xs hover:border-[#5A5A40] transition-colors" id="header-user-profile">
+                <button
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs cursor-pointer ${user.avatarColor}`}
+                  title="Editar Perfil de Estudiante"
+                  id="user-profile-avatar-btn"
+                >
+                  {user.name.charAt(0).toUpperCase()}
+                </button>
+                <div className="text-left hidden md:block">
+                  <p className="text-xs font-bold text-[#1A1A1A] leading-tight truncate max-w-[120px]">{user.name}</p>
+                  <p className="text-[9px] text-[#8A8A7F] uppercase tracking-wider leading-none truncate max-w-[120px]">{user.institution}</p>
+                </div>
+                <div className="w-px h-4 bg-[#DCDCD2] hidden md:block"></div>
+                <button
+                  onClick={() => {
+                    if (confirm("¿Estás seguro de que deseas cerrar sesión? Tus datos de perfil se eliminarán de este navegador.")) {
+                      handleUserLogout();
+                    }
+                  }}
+                  className="p-1 text-[#8A8A7F] hover:text-red-600 rounded-full hover:bg-[#E8E8E1] transition-all duration-200 cursor-pointer"
+                  title="Cerrar Sesión"
+                  id="header-logout-btn"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="inline-flex items-center gap-2 bg-[#5A5A40] hover:bg-[#4A4A33] border border-[#5A5A40] text-white font-bold text-xs px-4 py-2 rounded-full transition-all duration-200 cursor-pointer shadow-sm"
+                id="login-header-btn"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Iniciar Sesión</span>
+              </button>
+            )}
           </div>
 
         </div>
@@ -232,6 +467,8 @@ export default function App() {
               <EvaluationCard 
                 evaluation={evaluation} 
                 onRestart={startActivity} 
+                messages={messages}
+                unlockedConcepts={unlockedConcepts}
               />
             </motion.div>
           ) : (
@@ -256,6 +493,18 @@ export default function App() {
                 <ConceptBadges 
                   unlockedConcepts={unlockedConcepts} 
                 />
+
+                {/* Session History Board */}
+                <SessionHistory
+                  sessions={sessions}
+                  currentSessionId={currentSessionId}
+                  onSelectSession={loadSession}
+                  onDeleteSession={deleteSession}
+                  onStartNewSession={() => startActivity(true)}
+                />
+
+                {/* Pomodoro Timer Study Widget */}
+                <PomodoroTimer />
 
                 {/* Short guidelines */}
                 <div className="bg-white border border-[#DCDCD2] rounded-2xl p-5 shadow-sm" id="guidelines-card">
@@ -303,6 +552,13 @@ export default function App() {
           <p>© 2026 EduIA. Tutoría de Inteligencia Artificial Responsable • Diseñado con tonos naturales y tipografía orgánica.</p>
         </div>
       </footer>
+
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLogin={handleUserLogin}
+      />
 
     </div>
   );

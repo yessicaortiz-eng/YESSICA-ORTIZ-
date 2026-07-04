@@ -5,8 +5,9 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { ChatMessage } from "../types";
-import { Send, Bot, User, Sparkles, AlertCircle, HelpCircle, Paperclip, X, FileText, Upload } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertCircle, HelpCircle, Paperclip, X, FileText, Upload, Volume2, VolumeX, Scale } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { TextIntegrityAnalyzer } from "./TextIntegrityAnalyzer";
 
 interface ChatContainerProps {
   messages: ChatMessage[];
@@ -20,7 +21,129 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
   const [uploadedFile, setUploadedFile] = useState<{ name: string; content: string; size: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [isAnalyzerOpen, setIsAnalyzerOpen] = useState(false);
+
+  // Cancel any active speech on unmount
+  useEffect(() => {
+    return () => {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // PDF.js Text Extraction Function
+  const parsePdfFile = async (file: File) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfjs = (window as any).pdfjsLib;
+      if (!pdfjs) {
+        throw new Error("Librería PDF.js no cargada");
+      }
+
+      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+      const pdf = await loadingTask.promise;
+      const numPages = pdf.numPages;
+      let extractedText = "";
+
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(" ");
+        extractedText += `--- Página ${i} ---\n${pageText}\n\n`;
+      }
+
+      if (!extractedText.trim()) {
+        throw new Error("No se pudo extraer texto legible del PDF. Puede que sea un PDF escaneado (basado en imágenes) o esté vacío.");
+      }
+
+      setUploadedFile({
+        name: file.name,
+        content: extractedText,
+        size: file.size
+      });
+    } catch (err: any) {
+      console.error("Error al extraer texto del PDF:", err);
+      // fallback graceful warning
+      setUploadedFile({
+        name: file.name,
+        content: `[Análisis de PDF: El estudiante cargó el documento "${file.name}" (${(file.size / 1024).toFixed(1)} KB) que requiere revisión de honestidad, sesgo o atribución de fuentes con ayuda del Tutor de IA. Nota: ${err.message || "No se pudo extraer texto directamente."}]`,
+        size: file.size
+      });
+    }
+  };
+
+  // Global keyboard shortcut: Ctrl+Enter to send a message
+  useEffect(() => {
+    const handleGlobalChatKeys = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "Enter") {
+        const inputElem = document.getElementById("chat-input-textarea") as HTMLInputElement | null;
+        if (inputElem && !isLoading && currentPhase !== 6) {
+          e.preventDefault();
+          if (document.activeElement !== inputElem) {
+            inputElem.focus();
+          }
+          const form = inputElem.form;
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalChatKeys);
+    return () => window.removeEventListener("keydown", handleGlobalChatKeys);
+  }, [isLoading, currentPhase]);
+
+  // Handle Speech synthesis (Text-to-Speech)
+  const handleToggleSpeech = (messageId: string, text: string) => {
+    if (!("speechSynthesis" in window)) {
+      alert("Lo siento, tu navegador no soporta la funcionalidad de lectura de voz (Text-to-Speech).");
+      return;
+    }
+
+    if (speakingMessageId === messageId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    // Stop current speaking
+    window.speechSynthesis.cancel();
+
+    // Sanitize message content for speech
+    const cleanText = text
+      .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
+      .replace(/\*([^*]+)\*/g, "$1")    // italic
+      .replace(/📄 \*[^*]+\* \([\d.]+ KB\)\n---[\s\S]+?---/g, "") // remove documents content from voice
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = "es-ES";
+
+    // Select Spanish voice if possible
+    const voices = window.speechSynthesis.getVoices();
+    const spanishVoice = voices.find(v => v.lang.startsWith("es-"));
+    if (spanishVoice) {
+      utterance.voice = spanishVoice;
+    }
+
+    utterance.onend = () => {
+      setSpeakingMessageId(null);
+    };
+
+    utterance.onerror = () => {
+      setSpeakingMessageId(null);
+    };
+
+    setSpeakingMessageId(messageId);
+    window.speechSynthesis.speak(utterance);
+  };
 
   // Auto-scroll to bottom of chat whenever messages or loading state changes
   useEffect(() => {
@@ -28,6 +151,11 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
   }, [messages, isLoading]);
 
   const processFile = (file: File) => {
+    if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+      parsePdfFile(file);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const textContent = event.target?.result as string || "Contenido del archivo no legible";
@@ -68,6 +196,21 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
     }
   };
 
+  const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        parsePdfFile(file);
+      } else {
+        alert("Por favor, selecciona un archivo en formato PDF.");
+      }
+    }
+  };
+
+  const handleTriggerPdfInput = () => {
+    pdfInputRef.current?.click();
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -95,6 +238,9 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
     setUploadedFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+    if (pdfInputRef.current) {
+      pdfInputRef.current.value = "";
     }
   };
 
@@ -156,14 +302,27 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2" id="tutor-status-indicator">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#5A5A40] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#5A5A40]"></span>
-          </span>
-          <span className="text-xs font-semibold text-[#8A8A7F]">
-            Sesión Activa
-          </span>
+        <div className="flex items-center gap-3" id="tutor-status-indicator">
+          <button
+            type="button"
+            onClick={() => setIsAnalyzerOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-[#5A5A40] hover:bg-[#4A4A33] px-3.5 py-1.5 rounded-full transition-all duration-200 cursor-pointer shadow-3xs"
+            id="open-analyzer-header-btn"
+            title="Analizador de Integridad de Texto de IA"
+          >
+            <Scale className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Analizar Texto de IA</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#5A5A40] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#5A5A40]"></span>
+            </span>
+            <span className="text-xs font-semibold text-[#8A8A7F]">
+              Sesión Activa
+            </span>
+          </div>
         </div>
       </div>
 
@@ -213,10 +372,31 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
                     id={`bubble-${message.id}`}
                   >
                     {isModel && (
-                      <div className="flex items-center space-x-2 mb-2">
+                      <div className="flex items-center justify-between space-x-2 mb-2">
                         <span className="px-2 py-0.5 bg-[#F0F5EB] text-[#3E5C2E] text-[10px] font-bold uppercase rounded tracking-wider">
                           Retroalimentación
                         </span>
+                        
+                        {/* TTS Play/Stop Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSpeech(message.id, message.text)}
+                          className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#5A5A40] hover:text-[#4A4A33] uppercase tracking-wider px-2 py-0.5 hover:bg-[#F5F5F0] rounded transition-all cursor-pointer"
+                          title={speakingMessageId === message.id ? "Detener voz" : "Escuchar retroalimentación en voz alta"}
+                          id={`speech-toggle-btn-${message.id}`}
+                        >
+                          {speakingMessageId === message.id ? (
+                            <>
+                              <VolumeX className="w-3.5 h-3.5 text-red-600 animate-pulse" />
+                              <span className="text-red-600">Detener</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="w-3.5 h-3.5" />
+                              <span>Escuchar</span>
+                            </>
+                          )}
+                        </button>
                       </div>
                     )}
                     {message.text}
@@ -301,7 +481,7 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
       {/* Chat Input form */}
       <form onSubmit={handleSubmit} className="p-4 border-t border-[#DCDCD2] bg-white" id="chat-form">
         <div className="flex gap-3 items-center" id="form-layout">
-          {/* Hidden File Input */}
+          {/* Hidden File Inputs */}
           <input
             type="file"
             ref={fileInputRef}
@@ -309,15 +489,35 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
             className="hidden"
             id="hidden-document-file-input"
           />
+          <input
+            type="file"
+            ref={pdfInputRef}
+            onChange={handlePdfChange}
+            accept=".pdf"
+            className="hidden"
+            id="hidden-pdf-file-input"
+          />
           <button
             type="button"
             onClick={handleTriggerFileInput}
             disabled={isLoading || currentPhase === 6}
             className="p-3 bg-[#E8E8E1] hover:bg-[#DCDCD2] text-[#5A5A40] rounded-full transition-all duration-200 cursor-pointer flex-shrink-0 disabled:opacity-40"
-            title="Cargar documento para analizar (.txt, .md, .docx, .pdf, etc.)"
+            title="Cargar documento (.txt, .md, .docx, etc.)"
             id="trigger-file-upload-btn"
           >
             <Paperclip className="w-4.5 h-4.5" />
+          </button>
+
+          <button
+            type="button"
+            onClick={handleTriggerPdfInput}
+            disabled={isLoading || currentPhase === 6}
+            className="p-3 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-full transition-all duration-200 cursor-pointer flex-shrink-0 disabled:opacity-40 flex items-center justify-center gap-1.5 px-4"
+            title="Añadir documento PDF para revisión"
+            id="trigger-pdf-upload-btn"
+          >
+            <FileText className="w-4 h-4 text-red-600" />
+            <span className="text-xs font-bold uppercase tracking-wider text-red-700 hidden sm:inline">Añadir PDF</span>
           </button>
 
           <div className="flex-1 relative bg-[#F5F5F0] rounded-full px-5 py-2.5 border border-[#DCDCD2] flex items-center" id="textarea-wrapper">
@@ -340,12 +540,26 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
             Enviar
           </button>
         </div>
-        <div className="mt-2.5 text-center" id="input-help-text">
+        <div className="mt-2.5 text-center flex flex-col md:flex-row items-center justify-center gap-x-4 gap-y-1.5" id="input-help-text">
           <p className="text-[10px] text-[#8A8A7F] uppercase tracking-tighter font-medium">
-            Pulsa enter o haz clic en enviar • Tutoría personalizada activa
+            Pulsa Enter o haz clic en enviar • Tutoría personalizada activa
+          </p>
+          <span className="hidden md:inline text-[#DCDCD2] text-[10px]">•</span>
+          <p className="text-[10px] text-[#5A5A40] font-bold uppercase tracking-tighter flex items-center gap-1.5 justify-center flex-wrap">
+            <span>Atajos de teclado:</span>
+            <kbd className="bg-[#E8E8E1] text-[#2D2D2A] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold">Ctrl+Enter</kbd> Enviar
+            <kbd className="bg-[#E8E8E1] text-[#2D2D2A] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold">Ctrl+T</kbd> Temporizador
+            <kbd className="bg-[#E8E8E1] text-[#2D2D2A] px-1.5 py-0.5 rounded text-[9px] font-mono font-bold">Ctrl+N</kbd> Nueva Sesión
           </p>
         </div>
       </form>
+
+      {/* Academic Integrity AI-Generated Text Analyzer Modal */}
+      <TextIntegrityAnalyzer
+        isOpen={isAnalyzerOpen}
+        onClose={() => setIsAnalyzerOpen(false)}
+        onShareWithTutor={(summary) => onSendMessage(summary)}
+      />
 
     </div>
   );
