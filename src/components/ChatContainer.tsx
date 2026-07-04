@@ -5,9 +5,10 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { ChatMessage } from "../types";
-import { Send, Bot, User, Sparkles, AlertCircle, HelpCircle, Paperclip, X, FileText, Upload, Volume2, VolumeX, Scale } from "lucide-react";
+import { Send, Bot, User, Sparkles, AlertCircle, HelpCircle, Paperclip, X, FileText, Upload, Volume2, VolumeX, Scale, BrainCircuit } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { TextIntegrityAnalyzer } from "./TextIntegrityAnalyzer";
+import { DebateMode } from "./DebateMode";
 
 interface ChatContainerProps {
   messages: ChatMessage[];
@@ -25,6 +26,7 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [isAnalyzerOpen, setIsAnalyzerOpen] = useState(false);
+  const [isDebateOpen, setIsDebateOpen] = useState(false);
 
   // Cancel any active speech on unmount
   useEffect(() => {
@@ -302,7 +304,18 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-3" id="tutor-status-indicator">
+        <div className="flex items-center gap-3.5" id="tutor-status-indicator">
+          <button
+            type="button"
+            onClick={() => setIsDebateOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 px-3.5 py-1.5 rounded-full transition-all duration-200 cursor-pointer shadow-3xs"
+            id="open-debate-header-btn"
+            title="Modo Debate de IA"
+          >
+            <BrainCircuit className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Modo Debate</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setIsAnalyzerOpen(true)}
@@ -311,7 +324,7 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
             title="Analizador de Integridad de Texto de IA"
           >
             <Scale className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Analizar Texto de IA</span>
+            <span className="hidden sm:inline">Analizar Texto</span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -558,6 +571,13 @@ export function ChatContainer({ messages, onSendMessage, isLoading, currentPhase
       <TextIntegrityAnalyzer
         isOpen={isAnalyzerOpen}
         onClose={() => setIsAnalyzerOpen(false)}
+        onShareWithTutor={(summary) => onSendMessage(summary)}
+      />
+
+      {/* Ethical Debate Mode Modal */}
+      <DebateMode
+        isOpen={isDebateOpen}
+        onClose={() => setIsDebateOpen(false)}
         onShareWithTutor={(summary) => onSendMessage(summary)}
       />
 

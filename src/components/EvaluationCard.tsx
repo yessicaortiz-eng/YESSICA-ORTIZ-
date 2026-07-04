@@ -283,7 +283,7 @@ export function EvaluationCard({ evaluation, onRestart, messages, unlockedConcep
           </span>
           <div className="flex items-center gap-2">
             <span className={`px-4 py-1.5 rounded-full text-xs font-bold shadow-xs ${styles.badge}`} id="performance-level-badge">
-              {nivelDesempeño}
+              {nivelDesempeño === "Excelente" ? "Excelente 🌟🏆🎉👏" : nivelDesempeño === "Muy Bueno" ? "Muy Bueno ✨🎓👍" : nivelDesempeño}
             </span>
           </div>
           {/* Star ratings */}

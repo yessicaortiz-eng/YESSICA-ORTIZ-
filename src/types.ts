@@ -87,4 +87,23 @@ export interface TextAnalysisResult {
   suggestions: string[];
 }
 
+export interface DebateDilemma {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  difficulty: "Fácil" | "Medio" | "Difícil" | string;
+}
+
+export interface DebateCritiqueResult {
+  argumentSummary: string;
+  logicalConsistencyScore: number;
+  critiqueText: string;
+  logicalFallaciesDetected: string[];
+  strengths: string[];
+  weaknesses: string[];
+  counterArgument: string;
+}
+
+
 

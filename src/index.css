@@ -1,19 +1,43 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
+:root {
+  --color-natural-bg-val: #F5F5F0;
+  --color-natural-text-val: #2D2D2A;
+  --color-natural-sage-val: #5A5A40;
+  --color-natural-sage-dark-val: #4A4A35;
+  --color-natural-border-val: #DCDCD2;
+  --color-natural-cream-val: #FAFAFA;
+  --color-natural-muted-val: #8A8A7F;
+  --color-natural-light-sage-val: #E8E8E1;
+  --color-natural-dark-text-val: #1A1A1A;
+}
+
+:root.dark {
+  --color-natural-bg-val: #12120F;       /* Deep warm charcoal background */
+  --color-natural-text-val: #D2D2C4;     /* Extremely legible soft off-white text */
+  --color-natural-sage-val: #8E8E70;     /* Clear sage green for high contrast */
+  --color-natural-sage-dark-val: #A0A083; /* Warm lighter sage green for hovers */
+  --color-natural-border-val: #2E2E26;   /* Darker, softer border */
+  --color-natural-cream-val: #1A1A16;    /* Dark cream/charcoal container bg */
+  --color-natural-muted-val: #8E8E82;    /* Muted text color */
+  --color-natural-light-sage-val: #23231E; /* Soft highlight for hover backgrounds */
+  --color-natural-dark-text-val: #F5F5F0; /* Soft bright headers */
+}
+
 @theme {
   --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Lora", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-natural-bg: #F5F5F0;
-  --color-natural-text: #2D2D2A;
-  --color-natural-sage: #5A5A40;
-  --color-natural-sage-dark: #4A4A35;
-  --color-natural-border: #DCDCD2;
-  --color-natural-cream: #FAFAFA;
-  --color-natural-muted: #8A8A7F;
-  --color-natural-light-sage: #E8E8E1;
+  --color-natural-bg: var(--color-natural-bg-val);
+  --color-natural-text: var(--color-natural-text-val);
+  --color-natural-sage: var(--color-natural-sage-val);
+  --color-natural-sage-dark: var(--color-natural-sage-dark-val);
+  --color-natural-border: var(--color-natural-border-val);
+  --color-natural-cream: var(--color-natural-cream-val);
+  --color-natural-muted: var(--color-natural-muted-val);
+  --color-natural-light-sage: var(--color-natural-light-sage-val);
 }
 
 /* Custom scrollbar styling for a polished look */
@@ -35,7 +59,138 @@
 /* Base body styles using Natural Tones */
 body {
   font-family: var(--font-sans);
-  background-color: #F5F5F0;
-  color: #2D2D2A;
+  background-color: var(--color-natural-bg-val);
+  color: var(--color-natural-text-val);
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
 
+/* --- Dark Mode Semantic Overrides --- */
+
+.dark body {
+  background-color: var(--color-natural-bg-val);
+  color: var(--color-natural-text-val);
+}
+
+/* Scrollbar adjustment for dark mode */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(142, 142, 112, 0.25);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(142, 142, 112, 0.4);
+}
+
+/* Overriding direct compiled utility classes to support full application coverage */
+.dark .bg-\[\#F5F5F0\] {
+  background-color: var(--color-natural-bg-val) !important;
+}
+
+.dark .bg-white {
+  background-color: var(--color-natural-cream-val) !important;
+}
+
+.dark .bg-\[\#FAFAFA\] {
+  background-color: var(--color-natural-cream-val) !important;
+}
+
+.dark .bg-\[\#E8E8E1\] {
+  background-color: var(--color-natural-light-sage-val) !important;
+}
+
+.dark .bg-\[\#5A5A40\] {
+  background-color: var(--color-natural-sage-val) !important;
+}
+
+.dark .bg-\[\#F0F5EB\] {
+  background-color: #172615 !important; /* Soft dark olive forest for completed concept/badges */
+  border-color: #2D402A !important;
+}
+
+/* Interactive elements */
+.dark .hover\:bg-\[\#4A4A33\]:hover,
+.dark .hover\:bg-\[\#4A4A35\]:hover {
+  background-color: var(--color-natural-sage-dark-val) !important;
+}
+
+.dark .hover\:bg-\[\#DCDCD2\]:hover {
+  background-color: var(--color-natural-light-sage-val) !important;
+}
+
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover {
+  background-color: #23231E !important;
+}
+
+/* Borders */
+.dark .border-\[\#DCDCD2\] {
+  border-color: var(--color-natural-border-val) !important;
+}
+.dark .border-\[\#E8E8E1\] {
+  border-color: var(--color-natural-border-val) !important;
+}
+
+/* Typography styles */
+.dark .text-\[\#2D2D2A\] {
+  color: var(--color-natural-text-val) !important;
+}
+
+.dark .text-\[\#1A1A1A\] {
+  color: var(--color-natural-dark-text-val) !important;
+}
+
+.dark .text-\[\#5A5A40\] {
+  color: var(--color-natural-sage-val) !important;
+}
+
+.dark .text-\[\#8A8A7F\] {
+  color: var(--color-natural-muted-val) !important;
+}
+
+.dark .text-\[\#3E5C2E\] {
+  color: #9CD392 !important; /* Pastel olive for high contrast */
+}
+
+/* Form, Dialogs & inputs controls */
+.dark input, 
+.dark textarea, 
+.dark select {
+  background-color: #1A1A16 !important;
+  color: var(--color-natural-dark-text-val) !important;
+  border-color: var(--color-natural-border-val) !important;
+}
+
+.dark input::placeholder, 
+.dark textarea::placeholder {
+  color: var(--color-natural-muted-val) !important;
+}
+
+/* Alert boxes */
+.dark .bg-red-50 {
+  background-color: #2A1717 !important;
+  border-color: #4C2424 !important;
+}
+.dark .text-red-800,
+.dark .text-red-700,
+.dark .text-red-600 {
+  color: #FF9999 !important;
+}
+
+.dark .bg-emerald-50 {
+  background-color: #17261C !important;
+  border-color: #244031 !important;
+}
+.dark .text-emerald-800,
+.dark .text-emerald-700,
+.dark .text-emerald-600 {
+  color: #92FFAA !important;
+}
+
+.dark .bg-amber-50,
+.dark .bg-amber-50\/50 {
+  background-color: #282115 !important;
+  border-color: #463923 !important;
+}
+.dark .text-amber-800,
+.dark .text-amber-700,
+.dark .text-amber-600 {
+  color: #FFDF92 !important;
+}

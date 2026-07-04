@@ -6,13 +6,14 @@
 import React, { useState, useEffect } from "react";
 import { ChatMessage, Evaluation, PHASES, SavedSession, UserProfile } from "./types";
 import { ProgressTimeline } from "./components/ProgressTimeline";
+import { StudentXpCard } from "./components/StudentXpCard";
 import { ConceptBadges } from "./components/ConceptBadges";
 import { EvaluationCard } from "./components/EvaluationCard";
 import { ChatContainer } from "./components/ChatContainer";
 import { PomodoroTimer } from "./components/PomodoroTimer";
 import { SessionHistory } from "./components/SessionHistory";
 import { LoginModal } from "./components/LoginModal";
-import { Bot, Sparkles, RefreshCw, AlertCircle, HelpCircle, ShieldAlert, BookOpen, LogIn, LogOut, User, Check, X as CloseIcon } from "lucide-react";
+import { Bot, Sparkles, RefreshCw, AlertCircle, HelpCircle, ShieldAlert, BookOpen, LogIn, LogOut, User, Check, X as CloseIcon, Sun, Moon } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import confetti from "canvas-confetti";
 
@@ -26,9 +27,37 @@ export default function App() {
   const [isActivityFinished, setIsActivityFinished] = useState<boolean>(false);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
 
+  // Student global XP state
+  const [xp, setXp] = useState<number>(() => {
+    const saved = localStorage.getItem("eduia_student_xp");
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  // Keep XP updated in localStorage
+  useEffect(() => {
+    localStorage.setItem("eduia_student_xp", xp.toString());
+  }, [xp]);
+
+  // Dark/Light Theme state
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const saved = localStorage.getItem("eduia_tutor_theme");
+    return (saved === "dark" || saved === "light") ? (saved as "light" | "dark") : "light";
+  });
+
   // User Profile and Authentication State
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+
+  // Apply Theme effect
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === "dark") {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
+    }
+    localStorage.setItem("eduia_tutor_theme", theme);
+  }, [theme]);
 
   // Session History State parameters
   const [sessions, setSessions] = useState<SavedSession[]>([]);
@@ -243,10 +272,26 @@ export default function App() {
       const finished = !!data.isActivityFinished;
 
       // Update state with tutor's feedback
+      let tutorText = data.tutorResponse || "";
+      const hasCorrectKeyword = /correcto|excelente|muy bien|exacto|perfecto|así es|felicitaciones/i.test(tutorText);
+      const isCorrect = hasCorrectKeyword || (newPhase > currentPhase) || finished;
+
+      if (isCorrect) {
+        const positiveElements = ["✅", "🌟", "🎉", "¡Excelente!", "🎯", "✨"];
+        const shuffled = [...positiveElements].sort(() => 0.5 - Math.random());
+        const selectedCount = 3 + Math.floor(Math.random() * 2); // 3 or 4 elements
+        const selected = shuffled.slice(0, selectedCount).join(" ");
+        if (Math.random() > 0.5) {
+          tutorText = `${selected} ${tutorText}`;
+        } else {
+          tutorText = `${tutorText} ${selected}`;
+        }
+      }
+
       const modelMessage: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: "model",
-        text: data.tutorResponse,
+        text: tutorText,
         timestamp: new Date().toISOString(),
         phase: newPhase,
         unlockedConcepts: data.conceptosClaveDesbloqueados
@@ -288,6 +333,25 @@ export default function App() {
             origin: { y: 0.7 }
           });
         }
+      }
+
+      // Calculate and award XP points for progress
+      let xpEarned = 0;
+      if (newPhase > currentPhase) {
+        xpEarned += 150; // Earn 150 XP per phase completed
+      }
+      if (finished && !isActivityFinished) {
+        xpEarned += 300; // Earn 300 XP for full activity completion
+      }
+      
+      const prevUnlockedCount = unlockedConcepts.length;
+      const nextUnlockedCount = data.conceptosClaveDesbloqueados ? data.conceptosClaveDesbloqueados.length : prevUnlockedCount;
+      if (nextUnlockedCount > prevUnlockedCount) {
+        xpEarned += (nextUnlockedCount - prevUnlockedCount) * 50; // Earn 50 XP per concept badge unlocked
+      }
+
+      if (xpEarned > 0) {
+        setXp(prev => prev + xpEarned);
       }
 
       setCurrentPhase(newPhase);
@@ -374,6 +438,19 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3" id="header-actions">
+            <button
+              onClick={() => setTheme(prev => prev === "light" ? "dark" : "light")}
+              className="p-2 bg-[#E8E8E1] hover:bg-[#DCDCD2] border border-[#DCDCD2] text-[#2D2D2A] rounded-full transition-colors duration-200 cursor-pointer shadow-3xs flex items-center justify-center"
+              title={theme === "light" ? "Activar Modo Oscuro (Poca Luz)" : "Activar Modo Claro"}
+              id="theme-toggle-btn"
+            >
+              {theme === "light" ? (
+                <Moon className="w-4 h-4 text-[#5A5A40]" />
+              ) : (
+                <Sun className="w-4 h-4 text-[#5A5A40]" />
+              )}
+            </button>
+
             <button
               onClick={() => startActivity(true)}
               className="inline-flex items-center gap-2 bg-[#E8E8E1] hover:bg-[#DCDCD2] border border-[#DCDCD2] text-[#2D2D2A] font-semibold text-xs px-4 py-2 rounded-full transition-colors duration-200 cursor-pointer shadow-3xs"
@@ -483,6 +560,12 @@ export default function App() {
               {/* Left Column: Metrics & Timeline Dashboard */}
               <div className="lg:col-span-4 space-y-6 flex flex-col" id="dashboard-column">
                 
+                {/* Level and Experience Indicator */}
+                <StudentXpCard 
+                  xp={xp} 
+                  onClaimBonus={(amount) => setXp(prev => prev + amount)} 
+                />
+
                 {/* Progress Indicators */}
                 <ProgressTimeline 
                   currentPhase={currentPhase} 
